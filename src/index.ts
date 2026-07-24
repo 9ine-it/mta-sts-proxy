@@ -1,14 +1,41 @@
-// Proxies the Cloudflare Email Service MTA-STS policy file so it can be served
-// from your own domain under the well-known URI, as required by RFC 8461.
-//
-// Deploy this Worker, then add a custom domain of `mta-sts.<your-domain>` so
-// that `https://mta-sts.<your-domain>/.well-known/mta-sts.txt` resolves.
-//
-// Docs: https://developers.cloudflare.com/email-service/configuration/mta-sts/
-const POLICY_URL = "https://mta-sts.mx.cloudflare.net/.well-known/mta-sts.txt";
+const POLICY = [
+  "version: STSv1",
+  "mode: testing",
+  "mx: aspmx.l.google.com",
+  "mx: *.aspmx.l.google.com",
+  "max_age: 86400",
+  "",
+].join("\r\n");
 
 export default {
-	async fetch(request, env, ctx): Promise<Response> {
-		return await fetch(POLICY_URL);
-	},
-} satisfies ExportedHandler<Env>;
+  async fetch(request) {
+    const url = new URL(request.url);
+
+    if (url.pathname !== "/.well-known/mta-sts.txt") {
+      return new Response("Not found", {
+        status: 404,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+        },
+      });
+    }
+
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return new Response("Method not allowed", {
+        status: 405,
+        headers: {
+          Allow: "GET, HEAD",
+          "Content-Type": "text/plain; charset=utf-8",
+        },
+      });
+    }
+
+    return new Response(request.method === "HEAD" ? null : POLICY, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "public, max-age=300",
+      },
+    });
+  },
+};
